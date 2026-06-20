@@ -27,21 +27,39 @@ chmod +x /usr/local/bin/sc
 cat > /usr/local/bin/start_xy.sh <<'EOF'
 #!/usr/bin/env bash
 
-cd /etc
-sed -i "s/YOUR_UUID/$U/g" xy.json
-exec xy -c xy.json
+# 1. 確保目錄權限，避免權限衝突
+mkdir -p /etc/supervisor/conf.d
 
+# 2. 修改啟動腳本，使用更穩定的環境變數注入方式
+cat > /usr/local/bin/start_xy.sh <<'EOF'
+#!/usr/bin/env bash
+# 確保每次執行時都有正確的 UUID
+if [ -n "$U" ]; then
+    # 複製一份臨時配置，避免直接修改源文件導致重複替換
+    cp /etc/xy.json /tmp/xy.json
+    sed -i "s/YOUR_UUID/$U/g" /tmp/xy.json
+    exec xy -c /tmp/xy.json
+else
+    echo "UUID not set!"
+    exit 1
+fi
 EOF
 chmod +x /usr/local/bin/start_xy.sh
 
+# 3. 更新 Supervisor 配置，指定 -c 路徑以消除警告
+# 假設啟動 supervisor 的主程序命令是這樣調整：
+# supervisord -c /etc/supervisor/supervisord.conf
+
+# 調整各個 program 的配置，確保環境變數繼承
+# 在每個 [program:...] 下方增加環境變數傳遞
 cat > /etc/supervisor/conf.d/xy.conf <<EOF
 [program:xy]
-command=start_xy.sh
+command=/usr/local/bin/start_xy.sh
 autostart=true
 autorestart=true
-stdout_logfile = /dev/null
-stderr_logfile = /dev/null
-
+environment=U="%(ENV_U)s"
+stdout_logfile=/dev/stdout
+stderr_logfile=/dev/stderr
 EOF
 
 # cf startup
