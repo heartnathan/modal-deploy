@@ -36,12 +36,13 @@ vevc_image = (
     modal.Image.debian_slim()
     .apt_install("curl", "unzip", "supervisor", "procps")
     .run_commands(
-        f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
-        "mkdir -p /tmp/supervisor/conf.d"
+        # 1. 下載安裝腳本
+        f'curl -sSL "https://raw.githubusercontent.com/heartnathan/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
+        # 2. 建立目錄
+        "mkdir -p /tmp/supervisor/conf.d",
+        # 3. 最穩定的寫入方式：直接在指令中完成，不使用 Python 變數
+        "printf '[supervisord]\\nnodaemon=true\\nlogfile=/dev/null\\npidfile=/tmp/supervisord.pid\\n\\n[include]\\nfiles = /tmp/supervisor/conf.d/*.conf' > /tmp/supervisor/supervisord.conf"
     )
-    # 使用 .add_local_file 或 .run_commands 寫入檔案的替代方案：
-    # 這裡我們用最穩定的方式：將內容寫入一個暫存檔案並移動它
-    .run_commands(f'echo "{supervisord_conf_content}" > /tmp/supervisor/supervisord.conf')
     .pip_install("fastapi[standard]")
 )
 
