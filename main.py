@@ -3,19 +3,23 @@ import subprocess
 import os
 import base64
 
-# 1. 配置定義 (放在最前面，乾淨清爽)
+# --- 第一部分：變數與配置定義 ---
 INSTALL_SCRIPT_VERSION = 2
-supervisord_conf = """[supervisord]
-nodaemon=true
-logfile=/dev/null
-pidfile=/tmp/supervisord.pid
 
-[include]
-files = /tmp/supervisor/conf.d/*.conf
-"""
-write_conf_cmd = f"echo '{supervisord_conf}' > /tmp/supervisor/supervisord.conf"
+# 這就是你原本的配置，現在被安全的包裝在字串中
+supervisord_conf_escaped = (
+    "[supervisord]\n"
+    "nodaemon=true\n"
+    "logfile=/dev/null\n"
+    "pidfile=/tmp/supervisord.pid\n\n"
+    "[include]\n"
+    "files = /tmp/supervisor/conf.d/*.conf"
+)
 
-# 2. 你的選項函式 (保留它！)
+# 使用 printf 寫入，避免 Dockerfile 解析衝突
+write_conf_cmd = f"printf '{supervisord_conf_escaped}' > /tmp/supervisor/supervisord.conf"
+
+# --- 第二部分：選項函式 ---
 def _modal_function_options():
     opts = {}
     raw_region = os.environ.get("MODAL_REGION", "").strip()
@@ -27,7 +31,7 @@ def _modal_function_options():
         opts["nonpreemptible"] = True
     return opts
 
-# 3. Image 定義 (包含寫入配置的命令)
+# --- 第三部分：Image 定義 ---
 vevc_image = (
     modal.Image.debian_slim()
     .apt_install("curl", "unzip", "supervisor", "procps")
@@ -41,14 +45,26 @@ vevc_image = (
 
 app = modal.App("vevc-app")
 
-# 4. 在 @app.function 使用選項函式
+def start_supervisor():
+    global _supervisor_started
+    if not _supervisor_started:
+        env = os.environ.copy()
+        env["ENABLE_SC"] = "true" if "E" in env else "false"
+        # 關鍵：強制使用我們剛才寫入的絕對路徑設定檔
+        cmd = ["/usr/bin/supervisord", "-c", "/tmp/supervisor/supervisord.conf"]
+        subprocess.Popen(cmd, env=env)
+        _supervisor_started = True
+
+_supervisor_started = False
+
+# --- 第四部分：功能入口 ---
 @app.function(
     image=vevc_image,
     secrets=[modal.Secret.from_name("custom-secret")],
     min_containers=1,
     max_containers=1,
     scaledown_window=1200,
-    **_modal_function_options(), # 這裡保留著，非常重要！
+    **_modal_function_options(),
 )
 @modal.asgi_app()
 def main():
@@ -61,12 +77,10 @@ def main():
 
     @web_app.get("/status", response_class=PlainTextResponse)
     async def status():
-        start_supervisor()
         return "UP"
 
     @web_app.get(f"/{uuid}", response_class=PlainTextResponse)
     async def sub():
-        start_supervisor()
         domain = os.environ["D"]
         sub_url = f"vless://{uuid}@{domain}:443?encryption=none&security=tls&sni={domain}&fp=chrome&insecure=0&allowInsecure=0&type=ws&host={domain}&path=%2F%3Fed%3D2560#modal-ws-argo"
         return base64.b64encode(sub_url.encode("utf-8"))
