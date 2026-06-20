@@ -29,12 +29,12 @@ vevc_image = (
     modal.Image.debian_slim()
     .apt_install("curl", "unzip", "supervisor", "procps")
     .run_commands(
-        # 1. 下載並安裝
+        # 下載腳本
         f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
-        # 2. 預先建立目錄
+        # 建立目錄
         "mkdir -p /tmp/supervisor/conf.d",
-        # 3. 預先生成 supervisor.conf，解決 UserWarning
-        'echo "[supervisord]\nnodaemon=true\nlogfile=/dev/null\npidfile=/tmp/supervisord.pid\n[include]\nfiles = /tmp/supervisor/conf.d/*.conf" > /tmp/supervisor/supervisord.conf'
+        # 使用 bash -c 來處理多行寫入，避免語法衝突
+        'bash -c \'cat <<EOF > /tmp/supervisor/supervisord.conf\n[supervisord]\nnodaemon=true\nlogfile=/dev/null\npidfile=/tmp/supervisord.pid\n\n[include]\nfiles = /tmp/supervisor/conf.d/*.conf\nEOF\''
     )
     .pip_install("fastapi[standard]")
 )
