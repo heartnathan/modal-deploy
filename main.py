@@ -3,15 +3,20 @@ import subprocess
 import os
 import base64
 
+# 1. 配置定義 (放在最前面，乾淨清爽)
 INSTALL_SCRIPT_VERSION = 2
+supervisord_conf = """[supervisord]
+nodaemon=true
+logfile=/dev/null
+pidfile=/tmp/supervisord.pid
 
-# Optional deploy-time settings (read when `modal deploy` loads this file):
-#   MODAL_REGION            Comma-separated region ids (e.g. "us-east" or "ap-northeast-1,eu-west-1").
-#                           Unset or empty = Modal default scheduling (no fixed region).
-#                           See https://modal.com/docs/guide/region-selection
-#   MODAL_NONPREEMPTIBLE    Set to the string "true" to enable nonpreemptible on the Function; omit or "false" otherwise.
+[include]
+files = /tmp/supervisor/conf.d/*.conf
+"""
+write_conf_cmd = f"echo '{supervisord_conf}' > /tmp/supervisor/supervisord.conf"
+
+# 2. 你的選項函式 (保留它！)
 def _modal_function_options():
-    """Build optional kwargs for @app.function from environment (CI / local deploy)."""
     opts = {}
     raw_region = os.environ.get("MODAL_REGION", "").strip()
     if raw_region:
@@ -22,47 +27,28 @@ def _modal_function_options():
         opts["nonpreemptible"] = True
     return opts
 
-app = modal.App("vevc-app")
-# ... (前面保持不變)
-
+# 3. Image 定義 (包含寫入配置的命令)
 vevc_image = (
     modal.Image.debian_slim()
     .apt_install("curl", "unzip", "supervisor", "procps")
     .run_commands(
-        # 下載腳本
         f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
-        # 建立目錄
         "mkdir -p /tmp/supervisor/conf.d",
-        # 使用 bash -c 來處理多行寫入，避免語法衝突
-        'bash -c \'cat <<EOF > /tmp/supervisor/supervisord.conf\n[supervisord]\nnodaemon=true\nlogfile=/dev/null\npidfile=/tmp/supervisord.pid\n\n[include]\nfiles = /tmp/supervisor/conf.d/*.conf\nEOF\''
+        write_conf_cmd
     )
     .pip_install("fastapi[standard]")
 )
 
-def start_supervisor():
-    global _supervisor_started
-    if not _supervisor_started:
-        # 確保必要的環境變數存在
-        env = os.environ.copy()
-        env["ENABLE_SC"] = "true" if "E" in env else "false"
-        
-        # 使用 -c 指定絕對路徑，消除警告
-        cmd = ["/usr/bin/supervisord", "-c", "/tmp/supervisor/supervisord.conf"]
-        
-        # 使用 Popen 啟動，避免阻塞主線程，並確保它在後台運行
-        import subprocess
-        subprocess.Popen(cmd, env=env)
-        _supervisor_started = True
+app = modal.App("vevc-app")
 
-# ... (其餘 main 函數內容保持不變)
-
+# 4. 在 @app.function 使用選項函式
 @app.function(
     image=vevc_image,
     secrets=[modal.Secret.from_name("custom-secret")],
     min_containers=1,
     max_containers=1,
     scaledown_window=1200,
-    **_modal_function_options(),
+    **_modal_function_options(), # 這裡保留著，非常重要！
 )
 @modal.asgi_app()
 def main():
