@@ -23,23 +23,38 @@ def _modal_function_options():
     return opts
 
 app = modal.App("vevc-app")
+# ... (前面保持不變)
+
 vevc_image = (
     modal.Image.debian_slim()
-        .apt_install("curl", "unzip", "supervisor", "procps")
-        .run_commands(
-            f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash'
-        )
-        .pip_install("fastapi[standard]")
+    .apt_install("curl", "unzip", "supervisor", "procps")
+    .run_commands(
+        # 1. 下載並安裝
+        f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
+        # 2. 預先建立目錄
+        "mkdir -p /tmp/supervisor/conf.d",
+        # 3. 預先生成 supervisor.conf，解決 UserWarning
+        'echo "[supervisord]\nnodaemon=true\nlogfile=/dev/null\npidfile=/tmp/supervisord.pid\n[include]\nfiles = /tmp/supervisor/conf.d/*.conf" > /tmp/supervisor/supervisord.conf'
+    )
+    .pip_install("fastapi[standard]")
 )
-
-_supervisor_started = False
 
 def start_supervisor():
     global _supervisor_started
     if not _supervisor_started:
-        os.environ["ENABLE_SC"] = "true" if "E" in os.environ else "false"
-        subprocess.run(["supervisord"], env=os.environ.copy())
+        # 確保必要的環境變數存在
+        env = os.environ.copy()
+        env["ENABLE_SC"] = "true" if "E" in env else "false"
+        
+        # 使用 -c 指定絕對路徑，消除警告
+        cmd = ["/usr/bin/supervisord", "-c", "/tmp/supervisor/supervisord.conf"]
+        
+        # 使用 Popen 啟動，避免阻塞主線程，並確保它在後台運行
+        import subprocess
+        subprocess.Popen(cmd, env=env)
         _supervisor_started = True
+
+# ... (其餘 main 函數內容保持不變)
 
 @app.function(
     image=vevc_image,
