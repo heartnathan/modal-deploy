@@ -7,14 +7,14 @@ import base64
 INSTALL_SCRIPT_VERSION = 2
 
 # 這就是你原本的配置，現在被安全的包裝在字串中
-supervisord_conf_escaped = (
-    "[supervisord]\n"
-    "nodaemon=true\n"
-    "logfile=/dev/null\n"
-    "pidfile=/tmp/supervisord.pid\n\n"
-    "[include]\n"
-    "files = /tmp/supervisor/conf.d/*.conf"
-)
+supervisord_conf_content = """[supervisord]
+nodaemon=true
+logfile=/dev/null
+pidfile=/tmp/supervisord.pid
+
+[include]
+files = /tmp/supervisor/conf.d/*.conf
+"""
 
 # 使用 printf 寫入，避免 Dockerfile 解析衝突
 write_conf_cmd = f"printf '{supervisord_conf_escaped}' > /tmp/supervisor/supervisord.conf"
@@ -37,10 +37,11 @@ vevc_image = (
     .apt_install("curl", "unzip", "supervisor", "procps")
     .run_commands(
         f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
-        "mkdir -p /tmp/supervisor/conf.d",
-        # 使用一個單獨的 shell 腳本字串寫入，避免被 Docker 混淆
-        "bash -c 'cat <<EOF > /tmp/supervisor/supervisord.conf\n[supervisord]\nnodaemon=true\nlogfile=/dev/null\npidfile=/tmp/supervisord.pid\n\n[include]\nfiles = /tmp/supervisor/conf.d/*.conf\nEOF'"
+        "mkdir -p /tmp/supervisor/conf.d"
     )
+    # 使用 .add_local_file 或 .run_commands 寫入檔案的替代方案：
+    # 這裡我們用最穩定的方式：將內容寫入一個暫存檔案並移動它
+    .run_commands(f'echo "{supervisord_conf_content}" > /tmp/supervisor/supervisord.conf')
     .pip_install("fastapi[standard]")
 )
 
