@@ -38,7 +38,8 @@ vevc_image = (
     .run_commands(
         f'curl -sSL "https://raw.githubusercontent.com/vevc/modal-deploy/refs/heads/main/install.sh?v={INSTALL_SCRIPT_VERSION}" | bash',
         "mkdir -p /tmp/supervisor/conf.d",
-        write_conf_cmd
+        # 使用一個單獨的 shell 腳本字串寫入，避免被 Docker 混淆
+        "bash -c 'cat <<EOF > /tmp/supervisor/supervisord.conf\n[supervisord]\nnodaemon=true\nlogfile=/dev/null\npidfile=/tmp/supervisord.pid\n\n[include]\nfiles = /tmp/supervisor/conf.d/*.conf\nEOF'"
     )
     .pip_install("fastapi[standard]")
 )
