@@ -66,9 +66,6 @@ autorestart=true
 EOF
 
 # 6. Crontab 準備
-cat > my-crontab <<EOF
+cat > /tmp/app/my-crontab <<EOF
 */5 * * * * curl -o /dev/null -s \$E/status
 EOF
-
-# 7. 啟動 Supervisor (顯式指定配置檔路徑)
-exec /usr/bin/supervisord -c /tmp/supervisor/supervisord.conf
