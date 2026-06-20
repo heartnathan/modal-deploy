@@ -6,16 +6,6 @@ import base64
 # --- 第一部分：變數與配置定義 ---
 INSTALL_SCRIPT_VERSION = 2
 
-# 這就是你原本的配置，現在被安全的包裝在字串中
-supervisord_conf_content = """[supervisord]
-nodaemon=true
-logfile=/dev/null
-pidfile=/tmp/supervisord.pid
-
-[include]
-files = /tmp/supervisor/conf.d/*.conf
-"""
-
 # --- 第二部分：選項函式 ---
 def _modal_function_options():
     opts = {}
