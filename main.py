@@ -16,9 +16,6 @@ pidfile=/tmp/supervisord.pid
 files = /tmp/supervisor/conf.d/*.conf
 """
 
-# 使用 printf 寫入，避免 Dockerfile 解析衝突
-write_conf_cmd = f"printf '{supervisord_conf_escaped}' > /tmp/supervisor/supervisord.conf"
-
 # --- 第二部分：選項函式 ---
 def _modal_function_options():
     opts = {}
